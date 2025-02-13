@@ -29,7 +29,7 @@ public class ReservationSagaOrchestrator
         catch (Exception ex)
         {
             // Hata olursa rollback event yayınla
-            var rollbackEvent = new ReservationFailedEvent(reservationEvent.ReservationId, "Rezervasyon işlemi başarısız oldu.");
+            var rollbackEvent = new ReservationFailedEvent(reservationEvent.ReservationId, "Rezervasyon işlemi başarısız oldu.", ex.Message);
             await _eventBus.PublishQueueAsync(rollbackEvent, "reservation_events_direct", "reservation.rollback");
         }
     }
