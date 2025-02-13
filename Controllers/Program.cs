@@ -1,3 +1,4 @@
+using Application.Sagas;
 using Application.Services;
 using Application.Validation;
 using Application.Validation.Abstracts;
@@ -10,6 +11,8 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSingleton<IEventBus, EventBus>();
 
 builder.Services.AddScoped<ReservationService>();
+builder.Services.AddScoped<ReservationSagaOrchestrator>();
+
 builder.Services.AddScoped<ValidationManager>();
 
 

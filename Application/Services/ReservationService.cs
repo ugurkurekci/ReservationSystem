@@ -1,64 +1,94 @@
 ﻿using Application.Commands;
+using Application.Sagas;
 using Application.Validation;
 using Application.Validation.Dto;
 using Domain.Events;
 using Domain.Models;
 using Infrastructure.Messaging;
+using System;
+using System.Threading.Tasks;
 
-namespace Application.Services;
-public class ReservationService
+namespace Application.Services
 {
-
-    private readonly IEventBus _eventBus;
-    private readonly ValidationManager _validationManager;
-
-    public ReservationService(IEventBus eventBus, ValidationManager validationManager)
+    public class ReservationService
     {
-        _eventBus = eventBus;
-        _validationManager = validationManager;
-    }
+        private readonly IEventBus _eventBus;
+        private readonly ValidationManager _validationManager;
+        private readonly ReservationSagaOrchestrator _reservationSagaOrchestrator;
 
-    public async Task<ProjectResult> CreateReservationAsync(CreateReservationCommand command)
-    {
-
-        // Validate Request
-        if (command == null)
+        public ReservationService(IEventBus eventBus, ValidationManager validationManager, ReservationSagaOrchestrator reservationSagaOrchestrator)
         {
-            return new ProjectResult { IsValid = false, Message = "Geçersiz istek" };
+            _eventBus = eventBus;
+            _validationManager = validationManager;
+            _reservationSagaOrchestrator = reservationSagaOrchestrator;
         }
 
-        if (command.UserId <= 0 || command.DeviceId <= 0)
+        public async Task<ProjectResult> CreateReservationAsync(CreateReservationCommand command)
         {
-            return new ProjectResult { IsValid = false, Message = "Geçersiz kullanıcı veya cihaz bilgisi" };
+            if (!IsValidCommand(command, out var validationMessage))
+                return ErrorResult(validationMessage);
+
+            var validationResult = await _validationManager.ValidateAsync(command);
+            if (!validationResult.IsValid)
+                return ErrorResult(validationResult.Message);
+
+            var reservation = new Reservation
+            {
+                UserId = command.UserId,
+                DeviceId = command.DeviceId,
+                ReservationDate = DateTime.UtcNow
+            };
+
+            // **Veritabanına kaydedilmesi gerekiyor, burada simüle**
+            reservation.Id = SaveReservationToDatabase(reservation);
+
+            var reservationEvent = new ReservationCreatedEvent(reservation.Id, reservation.UserId, reservation.DeviceId, reservation.ReservationDate);
+            await PublishEventAsync(reservationEvent, "reservation_events_direct", "reservation.start");
+
+            await _reservationSagaOrchestrator.StartSagaAsync(reservationEvent);
+
+            return SuccessResult("Rezervasyon başarıyla oluşturuldu.");
         }
 
-        // Validate Business Rules
-        var validationResult = await _validationManager.ValidateAsync(command);
-        if (!validationResult.IsValid)
+        private bool IsValidCommand(CreateReservationCommand command, out string message)
         {
-            return new ProjectResult { IsValid = false, Message = validationResult.Message };
+            if (command == null)
+            {
+                message = "Geçersiz istek";
+                return false;
+            }
+
+            if (command.UserId <= 0 || command.DeviceId <= 0)
+            {
+                message = "Geçersiz kullanıcı veya cihaz bilgisi";
+                return false;
+            }
+
+            message = string.Empty;
+            return true;
         }
 
-        // Create Reservation
-
-        var reservation = new Reservation
+        private async Task PublishEventAsync(object @event, string exchange, string routingKey)
         {
-            UserId = command.UserId,
-            DeviceId = command.DeviceId,
-            ReservationDate = DateTime.UtcNow
-        };
+            try
+            {
+                await _eventBus.PublishQueueAsync(@event, exchange, routingKey);
+                Console.WriteLine($"Event published: {@event.GetType().Name}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error publishing event: {ex.Message}");
+            }
+        }
 
-        // db save operation
+        private int SaveReservationToDatabase(Reservation reservation)
+        {
+            // **Gerçek bir veritabanı kaydı olmalı**
+            return new Random().Next(100000, 999999);
+        }
 
+        private ProjectResult SuccessResult(string message) => new ProjectResult { IsValid = true, Message = message };
 
-        // Publish Events
-        var reservationEvent = new ReservationCreatedEvent(reservation.Id, reservation.UserId, reservation.DeviceId, reservation.ReservationDate);
-        var pushNotificationEvent = new PushNotificationEvent(reservation.UserId, "Rezervasyonunuz başarıyla oluşturuldu.");
-        var deviceStatusEvent = new DeviceStatusChangedEvent(reservation.DeviceId, true);
-
-        await _eventBus.PublishQueueAsync(pushNotificationEvent, "reservation_events_direct", "reservation.notification");
-        await _eventBus.PublishQueueAsync(deviceStatusEvent, "reservation_events_direct", "reservation.device");
-
-        return new ProjectResult { IsValid = true, Message = "Rezervasyon başarıyla oluşturuldu." };
+        private ProjectResult ErrorResult(string message) => new ProjectResult { IsValid = false, Message = message };
     }
 }

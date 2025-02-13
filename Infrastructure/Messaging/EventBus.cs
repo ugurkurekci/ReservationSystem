@@ -4,7 +4,6 @@ namespace Infrastructure.Messaging;
 
 public class EventBus : IEventBus
 {
-
     private readonly IRabbitMQClientPublisherService _rabbitMQClientPublisherService;
 
     public EventBus(IRabbitMQClientPublisherService rabbitMQClientPublisherService)
@@ -12,7 +11,7 @@ public class EventBus : IEventBus
         _rabbitMQClientPublisherService = rabbitMQClientPublisherService;
     }
 
-    public async Task PublishQueueAsync<T>(T @event,string exchange,string routingKey)
+    public async Task PublishQueueAsync<T>(T @event, string exchange, string routingKey)
     {
         _rabbitMQClientPublisherService.QueuePublish(@event, exchange, routingKey);
     }

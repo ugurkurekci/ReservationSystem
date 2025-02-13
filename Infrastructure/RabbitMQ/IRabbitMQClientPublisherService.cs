@@ -2,7 +2,6 @@
 
 public interface IRabbitMQClientPublisherService
 {
-
-    bool QueuePublish(object dto, string exchange, string routingKey);
-
+    bool PublishEvent(object dto, string exchange);
+    bool QueuePublish<T>(T message, string exchange, string routingKey);
 }
